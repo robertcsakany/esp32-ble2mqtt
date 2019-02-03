@@ -6,6 +6,7 @@
 #include "mqtt.h"
 #include "ota.h"
 #include "wifi.h"
+#include "uart_efm8bb1.h"
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_system.h>
@@ -100,11 +101,37 @@ static void ota_unsubscribe(void)
     mqtt_unsubscribe("BLE2MQTT/OTA/Config");
 }
 
+
+
+static void uart_efm8bb1_on_mqtt(const char *topic, const uint8_t *payload, size_t len,
+    void *ctx)
+{
+    char *pl = malloc(len + 1);
+    memcpy(pl, payload, len);
+    free(pl);
+}
+
+static void uart_efm8bb1_on_mqtt_subscribe(void)
+{
+    char topic[27];
+    sprintf(topic, "%s/RfRaw/set", device_name_get());
+    mqtt_subscribe(topic, 0, uart_efm8bb1_on_mqtt, NULL, NULL);
+}
+
+static void uart_efm8bb1_on_mqtt_unsubscribe(void)
+{
+    char topic[27];
+    sprintf(topic, "%s/RfRaw/set", device_name_get());
+    mqtt_unsubscribe(topic);
+}
+
+
 static void cleanup(void)
 {
     ble_disconnect_all();
     ble_scan_stop();
     ota_unsubscribe();
+    uart_efm8bb1_on_mqtt_unsubscribe();
 }
 
 /* Wi-Fi callback functions */
@@ -130,6 +157,7 @@ static void wifi_on_disconnected(void)
 static void mqtt_on_connected(void)
 {
     ESP_LOGI(TAG, "Connected to MQTT, scanning for BLE devices");
+    uart_efm8bb1_on_mqtt_subscribe();
     ota_subscribe();
     ble_scan_start();
 }
@@ -386,6 +414,15 @@ static uint32_t ble_on_passkey_requested(mac_addr_t mac)
     return passkey;
 }
 
+static void uart_efm88b1_raw_received(uint8_t *raw)
+{
+    char topic[27];
+    sprintf(topic, "%s/RfRaw/get", device_name_get());
+
+    mqtt_publish(topic, raw, strlen((char *)raw), config_mqtt_qos_get(), 0);
+}
+
+
 void app_main()
 {
     /* Initialize NVS */
@@ -418,6 +455,10 @@ void app_main()
     mqtt_set_on_connected_cb(mqtt_on_connected);
     mqtt_set_on_disconnected_cb(mqtt_on_disconnected);
 
+    /* Init UART EFM8BB1 */
+    ESP_ERROR_CHECK(uart_efm88b1_init());
+    uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received);
+
     /* Init BLE */
     ESP_ERROR_CHECK(ble_initialize());
     ble_set_on_broadcaster_discovered_cb(ble_on_broadcaster_discovered);
@@ -428,6 +469,7 @@ void app_main()
     ble_set_on_device_characteristic_value_cb(
         ble_on_device_characteristic_value);
     ble_set_on_passkey_requested_cb(ble_on_passkey_requested);
+
 
     /* Start by connecting to WiFi */
     wifi_hostname_set(device_name_get());
