@@ -72,57 +72,39 @@ void uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received_cb_t cb) {
 }
 
 
-uint8_t *bin2hex(uint8_t *p, int len)
+void *bin2hex(char *hex, uint8_t *bin, int len)
 {
-    static uint8_t hex[MAX_MESSAGE_SIZE * 2];
-	// char *hex = malloc(((2*len) + 1));
-
-
-    uint8_t *r = hex;
+    uint8_t *r = (uint8_t *)hex;
 
     while(len && p)
     {
-        (*r) = ((*p) & 0xF0) >> 4;
+        (*r) = ((*bin) & 0xF0) >> 4;
         (*r) = ((*r) <= 9 ? '0' + (*r) : 'A' - 10 + (*r));
         r++;
-        (*r) = ((*p) & 0x0F);
+        (*r) = ((*bin) & 0x0F);
         (*r) = ((*r) <= 9 ? '0' + (*r) : 'A' - 10 + (*r));
         r++;
-        p++;
+        bin++;
         len--;
     }
     *r = '\0';
-
-    return hex;
 }
 
-uint8_t *hex2bin(const char *str)
+void *hex2bin(uint8_t *bin, char *hex)
 {
-    static uint8_t result[MAX_MESSAGE_SIZE];
-
 	int len, h;
-    unsigned char *err, *p, c;
-
-    err = malloc(1);
-    *err = 0;
-
-    if (!str)
-        return err;
-
-    if (!*str)
-        return err;
+    unsigned char *p, c;
 
     len = 0;
-    p = (unsigned char*) str;
+    p = (unsigned char*) hex;
     while (*p++)
         len++;
 
-    // result = malloc((len/2)+1);
     h = !(len%2) * 4;
-    p = result;
+    p = bin;
     *p = 0;
 
-    c = *str;
+    c = *hex;
     while(c)
     {
         if(('0' <= c) && (c <= '9'))
@@ -131,11 +113,9 @@ uint8_t *hex2bin(const char *str)
             *p += (c - 'A' + 10) << h;
         else if(('a' <= c) && (c <= 'f'))
             *p += (c - 'a' + 10) << h;
-        else
-            return err;
 
-        str++;
-        c = *str;
+        hex++;
+        c = *hex;
 
         if (h)
             h = 0;
@@ -146,8 +126,6 @@ uint8_t *hex2bin(const char *str)
             *p = 0;
         }
     }
-
-    return result;
 }
 
 /*
@@ -354,6 +332,7 @@ static void echo_task()
 
 	int current_length = 0;
     uint8_t *message_buff = (uint8_t *) malloc(MAX_MESSAGE_SIZE);
+    uint8_t *hex = (uint8_t *) malloc(MAX_MESSAGE_SIZE * 2);
 
 
     while (1) {
@@ -368,16 +347,15 @@ static void echo_task()
 
 			for (int i = 0; i < len; i++) {
 				uint8_t current_byte = data[i];
-				message_buff[current_length] = current_byte;
-				current_length++;
+				message_buff[current_length++] = current_byte;
 
 				// EOL, we got the whole messsage.
 				if (current_byte == 55) {
-					uint8_t *hexstr = bin2hex(message_buff, current_length);
-					ESP_LOGI(TAG, "Message get: %s", hexstr);
+					bin2hex(hex, message_buff, current_length);
+					ESP_LOGI(TAG, "Message get: %s", hex);
 
 					if (uart_efm88b1_raw_received_cb) {
-						uart_efm88b1_raw_received_cb(hexstr);
+						uart_efm88b1_raw_received_cb(hex);
 					}
 					current_length = 0;
 				}
