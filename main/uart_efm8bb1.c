@@ -19,6 +19,20 @@
 /* Constants */
 static const char *TAG = "EFM8BB1";
 
+
+/**
+ * UART driver to handle UART interrupt.
+ *
+ * - Port: UART2
+ * - Receive (Rx) buffer: on
+ * - Transmit (Tx) buffer: off
+ * - Flow control: off
+ * - Event queue: on
+ * - Pin assignment: TxD (default), RxD (default)
+ */
+
+
+/*
 #define TXD  (17)
 #define RXD  (16)
 #define RTS  (18)
@@ -31,7 +45,25 @@ TaskHandle_t efm8bb_uart_receive_task;
 uint8_t *uart_efm88b1_receive_data = NULL;
 static uart_efm88b1_raw_received_cb_t uart_efm88b1_raw_received_cb = NULL;
 QueueHandle_t uart_efm88b1_queue;
+*/
 
+#define EX_UART_NUM UART_NUM_2
+#define EX_UART UART2
+
+#define ECHO_TEST_TXD  (GPIO_NUM_22)
+#define ECHO_TEST_RXD  (GPIO_NUM_23)
+#define ECHO_TEST_RTS  (UART_PIN_NO_CHANGE)
+#define ECHO_TEST_CTS  (UART_PIN_NO_CHANGE)
+
+
+#define BUF_SIZE (1024)
+static intr_handle_t handle_console;
+
+// Receive buffer to collect incoming data
+// uint8_t rxbuf[256];
+
+
+static uart_efm88b1_raw_received_cb_t uart_efm88b1_raw_received_cb = NULL;
 
 void uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received_cb_t cb) {
 	uart_efm88b1_raw_received_cb = cb;
@@ -198,24 +230,24 @@ static void uart_efm88b1_receiver(void *pvParameters)
                     ESP_LOGI(TAG, "uart frame error");
                     break;
                 //UART_PATTERN_DET
-                case UART_PATTERN_DET:
-                    uart_get_buffered_data_len(uart_num, &buffered_size);
-                    int pos = uart_pattern_pop_pos(uart_num);
-                    ESP_LOGI(TAG, "[UART PATTERN DETECTED] pos: %d, buffered size: %d", pos, buffered_size);
-                    if (pos == -1) {
-                        // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
-                        // record the position. We should set a larger queue size.
-                        // As an example, we directly flush the rx buffer here.
-                        uart_flush_input(uart_num);
-                    } else {
-                        uart_read_bytes(uart_num, dtmp, pos, 100 / portTICK_PERIOD_MS);
-                        uint8_t pat[PATTERN_CHR_NUM + 1];
-                        memset(pat, 0, sizeof(pat));
-                        uart_read_bytes(uart_num, pat, PATTERN_CHR_NUM, 100 / portTICK_PERIOD_MS);
-                        ESP_LOGI(TAG, "read data: %s", dtmp);
-                        ESP_LOGI(TAG, "read pat : %s", pat);
-                    }
-                    break;
+//                case UART_PATTERN_DET:
+//                    uart_get_buffered_data_len(uart_num, &buffered_size);
+//                    int pos = uart_pattern_pop_pos(uart_num);
+//                    ESP_LOGI(TAG, "[UART PATTERN DETECTED] pos: %d, buffered size: %d", pos, buffered_size);
+//                    if (pos == -1) {
+//                        // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
+//                        // record the position. We should set a larger queue size.
+//                        // As an example, we directly flush the rx buffer here.
+//                        uart_flush_input(uart_num);
+//                    } else {
+//                        uart_read_bytes(uart_num, dtmp, pos, 100 / portTICK_PERIOD_MS);
+//                        uint8_t pat[PATTERN_CHR_NUM + 1];
+//                        memset(pat, 0, sizeof(pat));
+//                        uart_read_bytes(uart_num, pat, PATTERN_CHR_NUM, 100 / portTICK_PERIOD_MS);
+//                        ESP_LOGI(TAG, "read data: %s", dtmp);
+//                        ESP_LOGI(TAG, "read pat : %s", pat);
+//                    }
+//                    break;
                 //Others
                 default:
                     ESP_LOGI(TAG, "uart event type: %d", event.type);
@@ -225,7 +257,7 @@ static void uart_efm88b1_receiver(void *pvParameters)
     }
     //free(dtmp);
     //dtmp = NULL;
-    vTaskDelete(NULL);
+    //vTaskDelete(NULL);
 }
 */
 /*
@@ -266,8 +298,104 @@ void uart_efm88b1_receiver(void* pv_parameter)
 }
 */
 
+/*
+ * Define UART interrupt subroutine to ackowledge interrupt
+ */
+/*
+static void IRAM_ATTR uart_intr_handle(void *arg)
+{
+  uint16_t rx_fifo_len;
+  uint16_t i=0;
+
+  //uint16_t status;
+  //status = EX_UART.int_st.val; // read UART interrupt Status
+  rx_fifo_len = EX_UART.status.rxfifo_cnt; // read number of bytes in UART buffer
+
+
+  while(rx_fifo_len){
+   rxbuf[i++] = EX_UART.fifo.rw_byte; // read all bytes
+   rx_fifo_len--;
+ }
+
+ // after reading bytes from buffer clear UART interrupt status
+ uart_clear_intr_status(EX_UART_NUM, UART_RXFIFO_FULL_INT_CLR|UART_RXFIFO_TOUT_INT_CLR);
+
+//	uint8_t *hexstr = bin2hex(rxbuf, i);
+//	ESP_LOGI(TAG, "Message get: %s", hexstr);
+
+// a test code or debug code to indicate UART receives successfully,
+// you can redirect received byte as echo also
+ //uart_write_bytes(uart_num, (const char*) "RX Done", 7);
+   uart_write_bytes(EX_UART_NUM,  (const char*) rxbuf, i);
+
+}
+*/
+
+static void echo_task()
+{
+    /* Configure parameters of an UART driver,
+     * communication pins and install the driver */
+    uart_config_t uart_config = {
+        .baud_rate = 19200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+    };
+    uart_param_config(EX_UART_NUM, &uart_config);
+    uart_set_pin(UEX_UART_NUMART_NUM_1, ECHO_TEST_TXD, ECHO_TEST_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS);
+
+    uart_driver_install(EX_UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0);
+
+    // Configure a temporary buffer for the incoming data
+    uint8_t *data = (uint8_t *) malloc(BUF_SIZE);
+
+    while (1) {
+        // Read data from the UART
+        int len = uart_read_bytes(EX_UART_NUM, data, BUF_SIZE, 20 / portTICK_RATE_MS);
+        // Write data back to the UART
+        uart_write_bytes(EX_UART_NUM, (const char *) data, len);
+    }
+}
+
 int uart_efm88b1_init()
 {
+    xTaskCreate(echo_task, "uart_echo_task", 1024, NULL, 10, NULL);
+
+
+	/* Configure parameters of an UART driver,
+	* communication pins and install the driver */
+/*
+uart_config_t uart_config = {
+		.baud_rate = 19200,
+		.data_bits = UART_DATA_8_BITS,
+		.parity = UART_PARITY_DISABLE,
+		.stop_bits = UART_STOP_BITS_1,
+		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+	};
+
+	ESP_ERROR_CHECK(uart_param_config(EX_UART_NUM, &uart_config));
+
+	//Set UART log level
+	esp_log_level_set(TAG, ESP_LOG_INFO);
+
+	//Set UART pins (using UART0 default pins ie no changes.)
+	ESP_ERROR_CHECK(uart_set_pin(EX_UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+	//Install UART driver, and get the queue.
+	ESP_ERROR_CHECK(uart_driver_install(EX_UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0));
+
+	// release the pre registered UART handler/subroutine
+	ESP_ERROR_CHECK(uart_isr_free(EX_UART_NUM));
+
+	// register new UART subroutine
+	ESP_ERROR_CHECK(uart_isr_register(EX_UART_NUM,uart_intr_handle, NULL, ESP_INTR_FLAG_IRAM, &handle_console));
+
+	// enable RX interrupt
+	ESP_ERROR_CHECK(uart_enable_rx_intr(EX_UART_NUM));
+*/
+
+	/*
 	if (uart_efm88b1_receive_data) {
 		return -1;
 	}
@@ -277,7 +405,7 @@ int uart_efm88b1_init()
 
 	uart_efm88b1_receive_data = (uint8_t *)malloc(BUF_SIZE);
 
-	/*
+	-/-*
 	uart_config_t uart_config = {
 			.baud_rate = 19200,
 			.data_bits = UART_DATA_8_BITS,
@@ -286,9 +414,9 @@ int uart_efm88b1_init()
 	        .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
 	        .rx_flow_ctrl_thresh = 122
 	};
-	*/
+	-*=/
 
-	/*
+
 	uart_config_t uart_config = {
 			.baud_rate = 19200,
 			.data_bits = UART_DATA_8_BITS,
@@ -298,16 +426,21 @@ int uart_efm88b1_init()
 			.rx_flow_ctrl_thresh = 0
 	};
 
-	uart_param_config(uart_num, &uart_config);
-	uart_set_pin(uart_num, TXD, RXD, RTS, CTS);
+	ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
+	ESP_ERROR_CHECK(uart_set_pin(uart_num, TXD, RXD, RTS, CTS));
 
-	ESP_ERROR_CHECK(uart_driver_install(uart_num, BUF_SIZE * 2, BUF_SIZE * 2, 0, &uart_efm88b1_queue, 0));
+//	ESP_ERROR_CHECK(uart_driver_install(uart_num, BUF_SIZE * 2, BUF_SIZE * 2, 0, &uart_efm88b1_queue, 0));
+    ESP_ERROR_CHECK(uart_driver_install(uart_num, BUF_SIZE * 2, BUF_SIZE * 2, 0, NULL, 0));
 
     //uint8_t *init = hex2bin("AAFF55");
     //uart_write_bytes(uart_num, (const char*) init, 3);
 
+    ESP_ERROR_CHECK(uart_isr_free(uart_num));
+
 	xTaskCreate(&uart_efm88b1_receiver, "uart_efm88b1_receiver", 2048, NULL, 12, &efm8bb_uart_receive_task);
 	*/
+
+
 	return 0;
 }
 
@@ -318,8 +451,8 @@ int uart_efm88b1_stop()
 	uart_driver_delete(uart_num);
 	free(uart_efm88b1_receive_data);
 	uart_efm88b1_receive_data = NULL;
-	return 0;
 	*/
+	return 0;
 }
 
 
