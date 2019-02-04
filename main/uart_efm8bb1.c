@@ -57,6 +57,8 @@ QueueHandle_t uart_efm88b1_queue;
 
 
 #define BUF_SIZE (1024)
+#define MAX_MESSAGE_SIZE (256)
+
 static intr_handle_t handle_console;
 
 // Receive buffer to collect incoming data
@@ -72,7 +74,7 @@ void uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received_cb_t cb) {
 
 uint8_t *bin2hex(uint8_t *p, int len)
 {
-    static uint8_t hex[BUF_SIZE * 2];
+    static uint8_t hex[MAX_MESSAGE_SIZE * 2];
 	// char *hex = malloc(((2*len) + 1));
 
 
@@ -96,7 +98,7 @@ uint8_t *bin2hex(uint8_t *p, int len)
 
 uint8_t *hex2bin(const char *str)
 {
-    static uint8_t result[BUF_SIZE];
+    static uint8_t result[MAX_MESSAGE_SIZE];
 
 	int len, h;
     unsigned char *err, *p, c;
@@ -343,18 +345,49 @@ static void echo_task()
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
     uart_param_config(EX_UART_NUM, &uart_config);
-    uart_set_pin(UEX_UART_NUMART_NUM_1, ECHO_TEST_TXD, ECHO_TEST_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS);
+    uart_set_pin(EX_UART_NUM, ECHO_TEST_TXD, ECHO_TEST_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS);
 
     uart_driver_install(EX_UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0);
 
     // Configure a temporary buffer for the incoming data
     uint8_t *data = (uint8_t *) malloc(BUF_SIZE);
 
+	int current_length = 0;
+    uint8_t *message_buff = (uint8_t *) malloc(MAX_MESSAGE_SIZE);
+
+
     while (1) {
         // Read data from the UART
         int len = uart_read_bytes(EX_UART_NUM, data, BUF_SIZE, 20 / portTICK_RATE_MS);
         // Write data back to the UART
         uart_write_bytes(EX_UART_NUM, (const char *) data, len);
+
+		if (len > 0) {
+
+			ESP_LOGD(TAG, "Received bytes %d", len);
+
+			for (int i = 0; i < len; i++) {
+				uint8_t current_byte = data[i];
+				message_buff[current_length] = current_byte;
+				current_length++;
+
+				// EOL, we got the whole messsage.
+				if (current_byte == 55) {
+					uint8_t *hexstr = bin2hex(message_buff, current_length);
+					ESP_LOGI(TAG, "Message get: %s", hexstr);
+
+					if (uart_efm88b1_raw_received_cb) {
+						uart_efm88b1_raw_received_cb(hexstr);
+					}
+					current_length = 0;
+				}
+				if (current_length > MAX_MESSAGE_SIZE - 1) {
+					ESP_LOGW(TAG, "Message overflow!");
+					current_length = 0;
+				}
+			}
+		}
+
     }
 }
 
