@@ -414,12 +414,12 @@ static uint32_t ble_on_passkey_requested(mac_addr_t mac)
     return passkey;
 }
 
-static void uart_efm88b1_raw_received(uint8_t *raw)
+static void uart_efm88b1_raw_received(unsigned char *raw)
 {
     char topic[27];
     sprintf(topic, "%s/RfRaw/get", device_name_get());
 
-    mqtt_publish(topic, raw, strlen((char *)raw), config_mqtt_qos_get(), 0);
+    mqtt_publish(topic, raw, strlen((const char *)raw), config_mqtt_qos_get(), 0);
 }
 
 

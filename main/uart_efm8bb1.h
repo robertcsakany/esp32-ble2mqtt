@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef void (*uart_efm88b1_raw_received_cb_t)(uint8_t *raw);
+typedef void (*uart_efm88b1_raw_received_cb_t)(unsigned char *raw);
 
 void uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received_cb_t cb);
 
