@@ -14,20 +14,11 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+#include "config.h"
 #include "uart_efm8bb1.h"
 
 /* Constants */
 static const char *TAG = "EFM8BB1";
-
-
-#define EX_UART_NUM UART_NUM_2
-#define EX_UART UART2
-
-#define ECHO_TEST_TXD  (GPIO_NUM_22)
-#define ECHO_TEST_RXD  (GPIO_NUM_23)
-#define ECHO_TEST_RTS  (UART_PIN_NO_CHANGE)
-#define ECHO_TEST_CTS  (UART_PIN_NO_CHANGE)
-
 
 #define BUF_SIZE (1024)
 #define MAX_MESSAGE_SIZE (256)
@@ -55,6 +46,9 @@ static const char *TAG = "EFM8BB1";
 
 static uart_efm88b1_raw_received_cb_t uart_efm88b1_raw_received_cb = NULL;
 
+uart_port_t uart_num = UART_NUM_2;
+int uart_txd_pin = 22;
+int uart_rxd_pin = 23;
 
 void uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received_cb_t cb) {
 	uart_efm88b1_raw_received_cb = cb;
@@ -86,7 +80,7 @@ static int _hex2bin(const char * in, uint8_t * out, int length) {
 }
 
 void _uart_efm88b1_write(uint8_t code) {
-    uart_write_bytes(EX_UART_NUM, (const char *) &code, 1);
+    uart_write_bytes(uart_num, (const char *) &code, 1);
 }
 
 void _uart_efm88b1_ack() {
@@ -139,6 +133,7 @@ void _uart_efm88b1_decode(uint8_t *message_buff) {
 
     if (action == RF_CODE_LEARN_OK) {
         ESP_LOGI(TAG, "Learn success");
+        // TODO: Store learnt code
         // rfbStore(_learnId, _learnStatus, buffer);
     }
 
@@ -151,6 +146,7 @@ void _uart_efm88b1_decode(uint8_t *message_buff) {
     	/*
         unsigned char id;
         unsigned char status;
+        // TODO get matched code
         bool matched = _rfbMatch(buffer, id, status, buffer);
 
         if (matched) {
@@ -182,7 +178,7 @@ static void uart_efm88b1_task()
     uint8_t receiving = 0;
 
     while (1) {
-        int len = uart_read_bytes(EX_UART_NUM, uart_efm88b1_uart_buff, BUF_SIZE, 20 / portTICK_RATE_MS);
+        int len = uart_read_bytes(uart_num, uart_efm88b1_uart_buff, BUF_SIZE, 20 / portTICK_RATE_MS);
 		if (len > 0) {
 
 			ESP_LOGD(TAG, "Received bytes %d", len);
@@ -224,6 +220,13 @@ int uart_efm88b1_init()
 	uart_efm88b1_message_buff = (uint8_t *) malloc(MAX_MESSAGE_SIZE);
 	uart_efm88b1_uart_buff = (uint8_t *) malloc(BUF_SIZE);
 
+	uart_num = config_efm8bb1_uart_num_get(uart_num);
+	uart_rxd_pin = config_efm8bb1_uart_rxpin_get(uart_rxd_pin);
+	uart_txd_pin = config_efm8bb1_uart_txpin_get(uart_txd_pin);
+
+    ESP_LOGI(TAG, "Initialize EFM88B1 Uart num: %d TX pin: %d RX pin: %d ", uart_num, uart_txd_pin, uart_rxd_pin);
+
+
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
     uart_config_t uart_config = {
@@ -233,10 +236,10 @@ int uart_efm88b1_init()
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    ESP_ERROR_CHECK(uart_param_config(EX_UART_NUM, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(EX_UART_NUM, ECHO_TEST_TXD, ECHO_TEST_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS));
+    ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(uart_num, uart_txd_pin, uart_rxd_pin, -1, -1));
 
-    ESP_ERROR_CHECK(uart_driver_install(EX_UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0));
 
     xTaskCreate(uart_efm88b1_task, "uart_efm88b1_task", 2048, NULL, 10, &uart_efm88b1_task_handle);
 	return 0;
@@ -245,7 +248,7 @@ int uart_efm88b1_init()
 int uart_efm88b1_stop()
 {
 	vTaskDelete(uart_efm88b1_task_handle);
-	ESP_ERROR_CHECK(uart_driver_delete(EX_UART_NUM));
+	ESP_ERROR_CHECK(uart_driver_delete(uart_num));
 	free(uart_efm88b1_message_buff);
 	free(uart_efm88b1_uart_buff);
 	uart_efm88b1_message_buff = NULL;

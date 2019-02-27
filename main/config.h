@@ -36,6 +36,11 @@ const char *config_wifi_password_get(void);
 const char *config_log_ip_get(void);
 uint16_t config_log_port_get(void);
 
+/* EFM8BB1 Configuration */
+uint8_t config_efm8bb1_uart_num_get(uint8_t def);
+uint8_t config_efm8bb1_uart_rxpin_get(uint8_t def);
+uint8_t config_efm8bb1_uart_txpin_get(uint8_t def);
+
 /* Configuration Update */
 int config_update_begin(config_update_handle_t *handle);
 int config_update_write(config_update_handle_t handle, uint8_t *data,

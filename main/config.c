@@ -302,6 +302,43 @@ uint16_t config_log_port_get(void)
     return NULL;
 }
 
+/* EFM8BB1 Configuration */
+uint8_t config_efm8bb1_uart_num_get(uint8_t def)
+{
+    cJSON *efm8bb1 = cJSON_GetObjectItemCaseSensitive(config, "efm8bb1");
+    cJSON *uart = cJSON_GetObjectItemCaseSensitive(efm8bb1, "uart");
+    cJSON *uart_num = cJSON_GetObjectItemCaseSensitive(uart, "num");
+
+    if (cJSON_IsNumber(uart_num))
+        return uart_num->valuedouble;
+
+    return def;
+}
+
+uint8_t config_efm8bb1_uart_rxpin_get(uint8_t def)
+{
+    cJSON *efm8bb1 = cJSON_GetObjectItemCaseSensitive(config, "efm8bb1");
+    cJSON *uart = cJSON_GetObjectItemCaseSensitive(efm8bb1, "uart");
+    cJSON *rxpin = cJSON_GetObjectItemCaseSensitive(uart, "rxpin");
+
+    if (cJSON_IsNumber(rxpin))
+        return rxpin->valuedouble;
+
+    return def;
+}
+
+uint8_t config_efm8bb1_uart_txpin_get(uint8_t def)
+{
+    cJSON *efm8bb1 = cJSON_GetObjectItemCaseSensitive(config, "efm8bb1");
+    cJSON *uart = cJSON_GetObjectItemCaseSensitive(efm8bb1, "uart");
+    cJSON *txpin = cJSON_GetObjectItemCaseSensitive(uart, "txpin");
+
+    if (cJSON_IsNumber(txpin))
+        return txpin->valuedouble;
+
+    return def;
+}
+
 /* Configuration Update */
 int config_update_begin(config_update_handle_t *handle)
 {
