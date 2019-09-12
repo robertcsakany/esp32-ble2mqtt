@@ -41,6 +41,10 @@ uint8_t config_efm8bb1_uart_num_get(uint8_t def);
 uint8_t config_efm8bb1_uart_rxpin_get(uint8_t def);
 uint8_t config_efm8bb1_uart_txpin_get(uint8_t def);
 
+const char *config_pt2260_get_name(const char *code);
+const char *config_pt2260_get_values(const char *code);
+
+
 /* Configuration Update */
 int config_update_begin(config_update_handle_t *handle);
 int config_update_write(config_update_handle_t handle, uint8_t *data,

@@ -15,6 +15,7 @@
 #include "lwip/sys.h"
 
 #include "config.h"
+#include "format_utils.h"
 #include "uart_efm8bb1.h"
 
 /* Constants */
@@ -45,6 +46,7 @@ static const char *TAG = "EFM8BB1";
 #define RF_MAX_KEY_LENGTH       (9)
 
 static uart_efm88b1_raw_received_cb_t uart_efm88b1_raw_received_cb = NULL;
+static uart_efm88b1_known_received_cb_t uart_efm88b1_known_received_cb = NULL;
 
 uart_port_t uart_num = UART_NUM_2;
 int uart_txd_pin = 22;
@@ -52,31 +54,6 @@ int uart_rxd_pin = 23;
 
 void uart_efm88b1_set_raw_received_cb(uart_efm88b1_raw_received_cb_t cb) {
 	uart_efm88b1_raw_received_cb = cb;
-}
-
-/*
- From a byte array to an hexa char array ("A220EE...", double the size)
- */
-static uint8_t _bin2hex(uint8_t * in, char * out, int n) {
-    for (unsigned char p = 0; p<n; p++) {
-        sprintf(&out[p*2], "%02X", in[p]);
-    }
-    return 1;
-}
-
-/*
- From an hexa char array ("A220EE...") to a byte array (half the size)
- */
-static int _hex2bin(const char * in, uint8_t * out, int length) {
-    int n = strlen(in);
-    if (n > RF_MAX_MESSAGE_SIZE*2 || (length > 0 && n != length)) return 0;
-    char tmp[3] = {0,0,0};
-    n /= 2;
-    for (unsigned char p = 0; p<n; p++) {
-        memcpy(tmp, &in[p*2], 2);
-        out[p] = strtol(tmp, NULL, 16);
-    }
-    return n;
 }
 
 void _uart_efm88b1_write(uint8_t code) {
@@ -101,16 +78,26 @@ void _uart_efm88b1_send_raw(uint8_t *message, int n) {
     }
 }
 
-void _uart_efm88b1_send(uint8_t *message) {
+// The standard transmit command for PT2260, PT2262, PT2264, EV1527, etc devices.
+// https://github.com/Portisch/RF-Bridge-EFM8BB1/wiki/0xA5
+void _uart_efm88b1_send_PT2260(uint8_t *message) {
 	_uart_efm88b1_write(RF_CODE_START);
 	_uart_efm88b1_write(RF_CODE_RFOUT);
-	_uart_efm88b1_send_raw(message, RF_MESSAGE_SIZE);
+	_uart_efm88b1_send_raw(message, strlen(message));
+	_uart_efm88b1_write(RF_CODE_STOP);
+}
+
+// Have to be in form of https://github.com/Portisch/RF-Bridge-EFM8BB1/wiki/0xB0
+void _uart_efm88b1_send_bucket(uint8_t *message) {
+	_uart_efm88b1_write(RF_CODE_START);
+	_uart_efm88b1_write(RF_CODE_RFOUT_BUCKET);
+	_uart_efm88b1_send_raw(message, strlen(message));
 	_uart_efm88b1_write(RF_CODE_STOP);
 }
 
 void _uart_efm88b1_send_raw_once(uint8_t *code, unsigned char length) {
     char buffer[length*2];
-    _bin2hex(code, buffer, length);
+    bin2hex(code, buffer, length);
     _uart_efm88b1_send_raw(code, length);
 }
 
@@ -127,7 +114,7 @@ void _uart_efm88b1_decode(uint8_t *message_buff) {
 
     if (action == RF_CODE_LEARN_OK || action == RF_CODE_RFIN) {
         _uart_efm88b1_ack();
-        _bin2hex(&message_buff[1], (char *)buffer, RF_MESSAGE_SIZE);
+        bin2hex(&message_buff[1], (char *)buffer, RF_MESSAGE_SIZE);
         ESP_LOGI(TAG, "Received message '%s'", buffer);
     }
 
@@ -243,6 +230,36 @@ int uart_efm88b1_init()
 
     xTaskCreate(uart_efm88b1_task, "uart_efm88b1_task", 2048, NULL, 10, &uart_efm88b1_task_handle);
 	return 0;
+}
+
+void uart_efm88b1_send_bucket(uint8_t *message) {
+	_uart_efm88b1_send(message);
+}
+
+void uart_efm88b1_send_PT2260(uint16_t tsyn, uint16_t tlow, uint16_t thigh, uint32_t data) {
+
+    char code[20];
+
+	// Print tsyn (2 byte 4 char)
+	bin2hex((uint8_t *)(&tsyn)+1, &buf[0], 1);
+	bin2hex((uint8_t *)(&tsyn), &buf[2], 1);
+
+	// Print tlow (2 byte 4 char)
+	bin2hex((uint8_t *)(&tlow)+1, &buf[4], 1);
+	bin2hex((uint8_t *)(&tlow), &buf[6], 1);
+
+	// Print thigh (2 byte 4 char)
+	bin2hex((uint8_t *)(&thigh)+1, &buf[8], 1);
+	bin2hex((uint8_t *)(&thigh), &buf[10], 1);
+
+	// Print data (3 byte 6 char)
+	bin2hex((uint8_t *)(&data)+2, &buf[12], 1);
+	bin2hex((uint8_t *)(&data)+1, &buf[14], 1);
+	bin2hex((uint8_t *)(&data), &buf[16], 1);
+
+	buf[18] = '\0';
+
+	_uart_efm88b1_send_PT2260(code);
 }
 
 int uart_efm88b1_stop()

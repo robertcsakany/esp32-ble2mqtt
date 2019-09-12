@@ -339,6 +339,45 @@ uint8_t config_efm8bb1_uart_txpin_get(uint8_t def)
     return def;
 }
 
+const char *config_pt2260_get_name(const char *code)
+{
+    cJSON *pt2260 = cJSON_GetObjectItemCaseSensitive(config, "pt2260");
+    cJSON *names = cJSON_GetObjectItemCaseSensitive(pt2260, "names");
+
+    cJSON *name;
+
+    if (!names)
+        return NULL;
+
+    for (name = names->child; name; name = name->next)
+    {
+        if (cJSON_IsString(name) && match_wildcard(name->string, code))
+            return key->valuestring;
+    }
+
+    return NULL;
+}
+
+const char *config_pt2260_get_values(const char *code)
+{
+    cJSON *pt2260 = cJSON_GetObjectItemCaseSensitive(config, "pt2260");
+    cJSON *values = cJSON_GetObjectItemCaseSensitive(pt2260, "values");
+
+    cJSON *value;
+
+    if (!names)
+        return NULL;
+
+    for (value = values->child; value; value = value->next)
+    {
+        if (cJSON_IsString(value) && match_wildcard(value->string, code))
+            return key->valuestring;
+    }
+
+    return NULL;
+}
+
+
 /* Configuration Update */
 int config_update_begin(config_update_handle_t *handle)
 {

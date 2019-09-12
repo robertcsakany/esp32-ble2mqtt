@@ -7,6 +7,7 @@
 #include "ota.h"
 #include "wifi.h"
 #include "uart_efm8bb1.h"
+#include "stat.h"
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_system.h>
@@ -106,22 +107,27 @@ static void ota_unsubscribe(void)
 static void uart_efm8bb1_on_mqtt(const char *topic, const uint8_t *payload, size_t len,
     void *ctx)
 {
-    char *pl = malloc(len + 1);
+
+    uint8_t *pl = malloc(len + 1);
     memcpy(pl, payload, len);
+    pl[len] = '\0';
+
+    ESP_LOGI(TAG, "Sending EFM8BB1 message: %s", (char *)pl);
+    uart_efm88b1_send(pl);
     free(pl);
 }
 
 static void uart_efm8bb1_on_mqtt_subscribe(void)
 {
     char topic[27];
-    sprintf(topic, "%s/RfRaw/set", device_name_get());
+    sprintf(topic, "%s/efm8bb1/set", device_name_get());
     mqtt_subscribe(topic, 0, uart_efm8bb1_on_mqtt, NULL, NULL);
 }
 
 static void uart_efm8bb1_on_mqtt_unsubscribe(void)
 {
     char topic[27];
-    sprintf(topic, "%s/RfRaw/set", device_name_get());
+    sprintf(topic, "%s/efm8bb1/set", device_name_get());
     mqtt_unsubscribe(topic);
 }
 
@@ -417,7 +423,7 @@ static uint32_t ble_on_passkey_requested(mac_addr_t mac)
 static void uart_efm88b1_raw_received(unsigned char *raw)
 {
     char topic[27];
-    sprintf(topic, "%s/RfRaw/get", device_name_get());
+    sprintf(topic, "%s/efm8bb1/get", device_name_get());
 
     mqtt_publish(topic, raw, strlen((const char *)raw), config_mqtt_qos_get(), 0);
 }
@@ -432,7 +438,7 @@ void app_main()
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-
+    stat_start();
     ESP_LOGI(TAG, "Version: %s", BLE2MQTT_VER);
 
     /* Init configuration */
