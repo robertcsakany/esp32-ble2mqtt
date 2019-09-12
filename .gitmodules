@@ -7,3 +7,6 @@
 [submodule "components/esp-request"]
 	path = components/esp-request
 	url = https://github.com/tuanpmt/esp-request
+[submodule "esp-idf"]
+	path = esp-idf
+	url = git@github.com:espressif/esp-idf.git
