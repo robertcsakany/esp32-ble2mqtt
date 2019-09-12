@@ -23,11 +23,8 @@
       "publishinterval": 0
     }
   },
-  "efm8bb1": {
-  	"uart": {
-  		"num": 2,
-  		"rxpin": 23,
-  		"txpin": 22
-     }
+  "log": {
+      "ip": "224.0.0.200",
+      "port": 5000
   }
 }

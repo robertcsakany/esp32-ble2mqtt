@@ -12,3 +12,5 @@ log.txt
 *.swp
 *.swo
 tags
+
+.python
