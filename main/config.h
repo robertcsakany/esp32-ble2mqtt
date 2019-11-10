@@ -43,6 +43,10 @@ const char *config_eap_identity_get(void);
 const char *config_eap_username_get(void);
 const char *config_eap_password_get(void);
 
+
+/* Livolo TX Configuration*/
+uint8_t config_livolotx_pin_get(void);
+
 /* Remote Logging Configuration */
 const char *config_log_host_get(void);
 uint16_t config_log_port_get(void);

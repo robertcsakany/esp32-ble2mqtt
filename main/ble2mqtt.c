@@ -5,6 +5,7 @@
 #include "log.h"
 #include "mqtt.h"
 #include "ota.h"
+#include "livolotx.h"
 #include "resolve.h"
 #include "wifi.h"
 #include <esp_err.h>
@@ -120,6 +121,39 @@ static void ota_on_mqtt(const char *topic, const uint8_t *payload, size_t len,
     free(url);
 }
 
+static void livolo_on_mqtt(const char *topic, const uint8_t *payload, size_t len,
+    void *ctx)
+{
+    char *command = malloc(len + 1);
+
+    memcpy(command, payload, len);
+    command[len] = '\0';
+
+    ESP_LOGI(TAG, "Livolo command %s", command);
+
+    //char *str = strndup(data, len);
+    char* remote_id_str = strtok(command, ","); 
+    char* keycode_str = NULL;
+    if (remote_id_str != NULL) 
+    {
+        keycode_str = strtok(NULL, ",");
+    }
+
+    if (!remote_id_str || !keycode_str)
+    {
+        ESP_LOGE(TAG, "Invalid LivoloTX command: %s", command);
+    } 
+    else 
+    {
+        unsigned long remote_id = strtoul(remote_id_str, NULL, 10);
+        unsigned long key_code = strtoul(keycode_str, NULL, 10);
+        
+        livolotx_send(remote_id, key_code);
+
+    }
+    free(command);
+}
+
 static void ota_subscribe(void)
 {
     char topic[27];
@@ -149,10 +183,29 @@ static void ota_unsubscribe(void)
     mqtt_unsubscribe("BLE2MQTT/OTA/Config");
 }
 
+
+static void livolo_subscribe(void)
+{
+    char topic[30];
+
+    sprintf(topic, "%s/Livolo/Send", device_name_get());
+    mqtt_subscribe(topic, 0, livolo_on_mqtt, (void *)OTA_TYPE_CONFIG, NULL);
+}
+
+static void livolo_unsubscribe(void)
+{
+    char topic[30];
+
+    sprintf(topic, "%s/Livolo/Send", device_name_get());
+    mqtt_unsubscribe(topic);
+}
+
+
 static void cleanup(void)
 {
     ble_disconnect_all();
     ble_scan_stop();
+    livolo_unsubscribe();
     ota_unsubscribe();
 }
 
@@ -183,6 +236,7 @@ static void mqtt_on_connected(void)
     ESP_LOGI(TAG, "Connected to MQTT, scanning for BLE devices");
     self_publish();
     ota_subscribe();
+    livolo_subscribe();
     ble_scan_start();
 }
 
@@ -791,6 +845,12 @@ void app_main()
 
     /* Start BLE2MQTT task */
     ESP_ERROR_CHECK(start_ble2mqtt_task());
+
+    /* Init Livolo transmitter */
+    if  (config_livolotx_pin_get())
+    { 
+        ESP_ERROR_CHECK(livolotx_init(config_livolotx_pin_get()));
+    }
 
     /* Start by connecting to WiFi */
     wifi_connect(config_wifi_ssid_get(), config_wifi_password_get(),
