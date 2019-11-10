@@ -444,6 +444,18 @@ const char *config_eap_password_get(void)
     return config_wifi_eap_get("password");
 }
 
+/* RF 433 Mhz receiver */
+uint8_t config_rf433rx_pin_get(void)
+{
+    cJSON *rf433rx = cJSON_GetObjectItemCaseSensitive(config, "rf433rx");
+    cJSON *pin = cJSON_GetObjectItemCaseSensitive(rf433rx, "pin");
+
+    if (cJSON_IsNumber(pin))
+        return pin->valueint;
+
+    return 0;
+}
+
 /* Remote Logging Configuration */
 const char *config_log_host_get(void)
 {

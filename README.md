@@ -64,6 +64,21 @@ is published.
 **Note:** Broadcaster topics are published without the retained flag regardless
 of what's defined in the configuration file.
 
+## 315 / 433 Mhz Radio receiver
+
+There is a ton of cheap 315 / 433 MHz AM radio controlled devices.
+Supported devices with one of the supported chipsets:
+
+* SC5262 / SC5272
+* HX2262 / HX2272
+* PT2262 / PT2272
+* EV1527 / RT1527 / FP1527 / HS1527
+* Intertechno outlets
+* HT6P20X
+
+BLE2MQTT receives the code come from a device, to the topic RF433RX/<PROTOCOL NUMBER> The value is the read ha value from device.
+
+
 ## Compiling
 
 Download the repository and its dependencies:
@@ -262,6 +277,20 @@ The optional `log` section below includes the following entries:
 * `host` - The hostname or IP address to send the logs to. In case of an IP
   address, this may be a unicast, broadcast or multicast address
 * `port` - The destination UDP port
+
+The optional `rf433rx` section below includes the following entries:
+
+```json
+{
+  "rf433rx": {
+    "pin": 27
+  }
+}
+```
+* `pin` - The pin number where radio receiver is connected. When it is not 
+defined the module in not initialized.
+
+
 
 ## OTA
 

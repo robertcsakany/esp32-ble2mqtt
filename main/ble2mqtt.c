@@ -7,6 +7,7 @@
 #include "ota.h"
 #include "resolve.h"
 #include "wifi.h"
+#include "rf433rx.h"
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_system.h>
@@ -440,6 +441,22 @@ static uint32_t ble_on_passkey_requested(mac_addr_t mac)
     return passkey;
 }
 
+/* RF433 callback functions */
+static void rf433rx_on_message(uint8_t received_protocol, uint32_t value)
+{
+    char topic[MAX_TOPIC_LEN];
+
+    char protocol[2];
+    sprintf(protocol, "%X", received_protocol);
+
+    char message[9];
+    sprintf(message, "%X", value);
+
+    sprintf(topic, "%s/RF433RX/%s", device_name_get(), protocol);
+    mqtt_publish(topic, (uint8_t *) message, strlen(message), config_mqtt_qos_get(), 0);
+}
+
+
 /* BLE2MQTT Task and event callbacks */
 typedef enum {
     EVENT_TYPE_HEARTBEAT_TIMER,
@@ -454,6 +471,7 @@ typedef enum {
     EVENT_TYPE_BLE_DEVICE_DISCONNECTED,
     EVENT_TYPE_BLE_DEVICE_SERVICES_DISCOVERED,
     EVENT_TYPE_BLE_DEVICE_CHARACTERISTIC_VALUE,
+    EVENT_TYPE_RF433RX_ON_MESSAGE,
 } event_type_t;
 
 typedef struct {
@@ -489,6 +507,12 @@ typedef struct {
             uint8_t *value;
             size_t value_len;
         } ble_device_characteristic_value;
+        struct {
+            uint32_t value;
+            uint8_t bit_length;
+            uint32_t received_delay;
+            uint8_t received_protocol;
+        } rf433rx_message;
     };
 } event_t;
 
@@ -545,6 +569,12 @@ static void ble2mqtt_handle_event(event_t *event)
             event->ble_device_characteristic_value.value,
             event->ble_device_characteristic_value.value_len);
         free(event->ble_device_characteristic_value.value);
+        break;
+    case EVENT_TYPE_RF433RX_ON_MESSAGE:
+        rf433rx_on_message(
+            event->rf433rx_message.received_protocol,
+            event->rf433rx_message.value
+        );
         break;
     }
 
@@ -737,6 +767,22 @@ static void _ble_on_device_characteristic_value(mac_addr_t mac,
     xQueueSend(event_queue, &event, portMAX_DELAY);
 }
 
+static void _rf433rx_on_message(uint32_t value, uint8_t bit_length, 
+    uint32_t received_delay, uint8_t received_protocol)
+{
+    event_t *event = malloc(sizeof(*event));
+
+    event->type = EVENT_TYPE_RF433RX_ON_MESSAGE;
+    event->rf433rx_message.value = value;
+    event->rf433rx_message.bit_length = bit_length;
+    event->rf433rx_message.received_delay = received_delay;
+    event->rf433rx_message.received_protocol = received_protocol;
+
+    //ESP_LOGD(TAG, "Queuing event RF433 REVEIVED MESSAGE");
+    xQueueSend(event_queue, &event, portMAX_DELAY);
+}
+
+
 void app_main()
 {
     /* Initialize NVS */
@@ -791,6 +837,13 @@ void app_main()
 
     /* Start BLE2MQTT task */
     ESP_ERROR_CHECK(start_ble2mqtt_task());
+
+    /* Init RF433 receiver */
+    if  (config_rf433rx_pin_get())
+    { 
+        ESP_ERROR_CHECK(rf433rx_init(config_rf433rx_pin_get()));
+        rf433rx_set_on_message_cb(_rf433rx_on_message);
+    }
 
     /* Start by connecting to WiFi */
     wifi_connect(config_wifi_ssid_get(), config_wifi_password_get(),
