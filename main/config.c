@@ -444,7 +444,7 @@ const char *config_eap_password_get(void)
     return config_wifi_eap_get("password");
 }
 
-/* RF 433 Mhz receiver */
+/* Livolo sender */
 uint8_t config_livolotx_pin_get(void)
 {
     cJSON *livolotx = cJSON_GetObjectItemCaseSensitive(config, "livolotx");
@@ -455,6 +455,7 @@ uint8_t config_livolotx_pin_get(void)
 
     return 0;
 }
+
 /* Remote Logging Configuration */
 const char *config_log_host_get(void)
 {
